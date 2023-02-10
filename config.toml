@@ -1,0 +1,27 @@
+baseURL = 'https://blog.zhukoff.net'
+canonifyurls = true
+relativeURLS = false
+contentdir = "content"
+publishdir = "public"
+languageCode = 'en-us'
+title = "Landgraf's notes"
+[[params.links]]
+[[params.links.link]]
+name = "Github"
+href = "https://github.com/landgraf/"
+[[params.links.link]]
+name = "Tags"
+href = "/tags"
+[[params.links.link]]
+name = "Categories"
+href = "/categories"
+[[params.links.link]]
+name = "Archive"
+href = "/posts"
+[markup.goldmark.renderer]
+  unsafe = true
+
+[module]
+  [[module.imports]]
+    path = "github.com/adityatelange/hugo-PaperMod"
+

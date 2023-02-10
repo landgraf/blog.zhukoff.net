@@ -1,0 +1,184 @@
+#+hugo_base_dir: /home/pzhukov/repos/blog/blog.zhukoff.net
+#+HUGO_AUTO_SET_LASTMOD: t
+# org-hugo-auto-export-on-save: t
+
+
+* DONE My first post. Emacs, org-mode and hugo                   :emacs:blog:
+:PROPERTIES:
+:EXPORT_FILE_NAME: my-first-post
+:EXPORT_DATE: <2023-02-09 Thu>
+:END:
+Welcome back, my dear blog!
+
+#+BEGIN_QUOTE
+First rule of the blogger: describe the setup of your blog (c) @quarckster
+#+END_QUOTE
+
+I used to have blog.zhukoff.net in the past. It was in Russian and wordpress-powered. Maintaining of the wordpress, backups and posting using web browser was not good experience overall so it happened and the blog died...
+Few days ago I've decided that I need some space to put my thoughts, logs and random stuff and I don't want to use any WYSIWYG editors. Confluence at work is driving me mad, having something similar for out of work activities was not an option. So the requirement was: static web pages generator which is able to convert some kind of markup language into nice but simple blog.
+As I spent most of the time in Emacs editor (or Emacs OS because vim is the only text editor) the solution which has been chosen is quite obvious: emacs org-mode + hugo.
+
+Setup is quite simple. Blog directory with simple config:
+#+BEGIN_SRC
+baseURL = 'https://blog.zhukoff.net'
+canonifyurls = true
+relativeURLS = false
+contentdir = "content"
+publishdir = "public"
+languageCode = 'en-us'
+title = "Landgraf's notes"
+[[params.links]]
+[[params.links.link]]
+name = "Github"
+href = "https://github.com/landgraf/"
+[[params.links.link]]
+name = "Tags"
+href = "/tags"
+[[params.links.link]]
+name = "Categories"
+href = "/categories"
+[[params.links.link]]
+name = "Archive"
+href = "/posts"
+[markup.goldmark.renderer]
+  unsafe = true
+
+[module]
+  [[module.imports]]
+    path = "github.com/adityatelange/hugo-PaperMod"
+
+#+END_SRC
+
+If you're going to use this PLEASE pay attention to baseURL parameter. It's really important, like REAL important and MUST point to the real, DNS-resolvable URL of the blog, otherwise the result of the rendering will look nice locally but once synced to web server it will be screwed up! You're warned, I've spent few hours debugging this.
+
+And 'ox-hugo' package for emacs installed as simple as:
+#+BEGIN_SRC
+  M-x package-install ox-hugo
+  (require 'ox-hugo) ;; add to .emacs.el
+#+END_SRC
+
+And... org-mode subtree can be exported in hugo with
+#+BEGIN_SRC
+  C-c C-e H H
+#+END_SRC
+
+The only thing I had to add is properties to the top-level heading of the pos
+#+BEGIN_SRC
+:PROPERTIES:
+:EXPORT_FILE_NAME: my-post
+:EXPORT_DATE: <2023-02-09 Thu> ;; We're in org-mode, right? This can be added as simple as C-. :) 
+:END:
+#+END_SRC
+and point org-mode to the top dir of the hugo with:
+
+#+BEGIN_SRC
+#+hugo_base_dir: /home/pzhukov/repos/blog/blog.zhukoff.net
+#+HUGO_AUTO_SET_LASTMOD: t
+#+END_SRC
+
+the only step left is to compile public pages and copy them over to the root directory of your favorite web server.
+hugo itself can serve as a web server, however it is not recommended
+
+#+BEGIN_SRC
+  ## NOTE: 991:990 is uid and gid of the user webserver is running with
+  hugo && rsync -a --delete -v --chown=991:990 public/ user@mywebserver.com:/usr/share/nginx/html/
+#+END_SRC
+
+Benefits of such setup are more than obvious:
+- No more heavy full-blown WYSIWYG editors for simple blog
+- (almost) all features of org-mode formatting/gtd/timestamps/refilling/capturing can be used
+- Blog can be exported not only into hugo but plain html, pdf, jira :) etc with org-mode's export engine
+- backups can be done in simple git repo with version control
+
+So far, so good! Stay tuned!
+  
+* DONE openSUSE HackWeek 22. MangoPi MQ Pro and Yocto. :yocto:embedded:debugging:mangopi_mq_pro:
+:PROPERTIES:
+:EXPORT_FILE_NAME: mangopi-yocto
+:EXPORT_DATE: <2023-02-10 Fri>
+:END:
+
+*** HackWeek
+Last week was 22nd openSuse HackWeek and first one I was participating in.
+The initial idea was to package Ada stack for openSuse but it was [[https://build.opensuse.org/project/show/home:vibondare:devel:languages:Ada][done]] already by  Vitalii Bondarenko.
+Then I realized that I've spent few bucks on [[https://mangopi.org/mangopi_mqpro][MangoPi MQ Pro]] boards which are laying around for some time
+and decided to build my own image for it. Goals were:
+- Build image with working hardware (most importantly Wifi and Bluetooth as I've not found working Bluetooth
+  driver in any other image available, the reason(s) will be below)
+- Brush on my Yocto Project skills. I've been working with this amazing project for one year and a half now but
+  mostly on toolchain side and almost haven't touched BSP related topic
+- Build image which can be easily customized for my needs (it's embedded after all)
+- Have some fun :-)
+
+Thankfully [[https://github.com/riscv/meta-riscv][meta-riscv]] layer for Yocto Project with nezha board definition was available already and I was able to build and boot image from it.
+While the image was bootable and even somehow worked hdmi output didn't work as well as wifi and bluetooth. The only
+communication mechanism was serial console which is not the best option :) The reason is simple: nezha and MangoPi MQ Pro share same SoC but peripheral devices differ a lot.
+
+*** HDMI
+HDMI output has been fixed relatively easy: by choosing proper Device Tree description and putting it into machine configuration.
+
+*** Wifi
+Wireless chip's (Realtek RTL8723ds) driver is not in the mainline kernel but available as out-of-tree module. Packaging of it was [[https://github.com/riscv/meta-riscv/tree/master/recipes-kernel/rtl8723ds-mod][relatively easy]] (even if it was my first experience of out-of-tree module packaging the Yocto Project documentation covers this topic quite well).
+After adding
+#+BEGIN_SRC
+MACHINE_EXTRA_RRECOMMENDS += " kernel-modules kernel-module-rtl8723ds"
+#+END_SRC
+into machine configuration file and rebuilding of the image wifi card appeared in the system. Win!
+
+*** Bluetooth
+While bluetooth chip is the same as wifi one it connected via UART interface and driver is different. Funny enough the support for rtl8723ds_bt is in mainline kernel so the impression was it'll be easy to enable one. This was huge mistake...
+First of all it required kernel options to be enabled. This was easy task (and yes, Yocto Project documentation [[https://docs.yoctoproject.org/kernel-dev/common.html#changing-the-configuration][covers]] this topic pretty well). The config has been [[https://github.com/riscv/meta-riscv/blob/master/recipes-kernel/linux/linux-allwinnerd1-dev/mangopi-mq-pro.cfg][generated]] and kernel built. Not a rocket science for gentoo user :)
+#+BEGIN_SRC
+CONFIG_BT=m
+CONFIG_BT_BREDR=y
+CONFIG_BT_LE=y
+CONFIG_BT_DEBUGFS=y
+CONFIG_BT_RTL=m
+CONFIG_BT_HCIUART=m
+CONFIG_BT_HCIUART_SERDEV=y
+CONFIG_BT_HCIUART_3WIRE=y
+CONFIG_BT_HCIUART_RTL=y
+CONFIG_CFG80211=m
+CONFIG_MAC80211=m
+CONFIG_RFKILL=m
+CONFIG_RFKILL_LEDS=y
+CONFIG_BRCMUTIL=m
+CONFIG_BRCMFMAC=m
+CONFIG_SERIAL_DEV_BUS=y
+CONFIG_SERIAL_DEV_CTRL_TTYPORT=y
+CONFIG_CRYPTO_KPP=m
+CONFIG_CRYPTO_ECC=m
+CONFIG_CRYPTO_ECDH=m
+CONFIG_CRYPTO_LIB_ARC4=m
+#+END_SRC
+Even with the proper config kernel didn't see the device. I heard words "Device Tree" before and I knew it's something to do with hardware description in arm/riscv/embedded world and it was all I knew about it :-) . This [[https://elinux.org/images/0/04/Dt_debugging_elce_2015_151006_0421.pdf][presentation]] helped me a lot in understanding of dts/dtb/dtc/device noded and related stuff. Few late night hours spent on debugging but dts and generated dtb looked good. The only clue was the fact that decompilled Device Tree from the device looked differently (and yes, the only difference was bluetooth module node missing).
+Further investigation showed that changes in dts files didn't affect decompilled dts on device and sometimes weird dts'es appeared here and there.  I'm already mature enough and know that magic exists only in the "Merlin" TV Series so the reason was not so magical: [[https://github.com/smaeul/linux/tree/d1/wip/arch/riscv/boot/dts/allwinner][kernel]] and [[https://github.com/smaeul/u-boot/tree/d1-wip/arch/riscv/dts][u-boot]] had different dts and that caused problem. DTS synced and driver appeared in the dmesg output but...
+The driver requires firmware blob from the vendor (rtl8723ds_fw and *_conf). While the blobs are available in Armbian or [[https://github.com/Realtek-OpenSource/android_hardware_realtek/tree/rtk1395/bt/rtkbt/Firmware/BT][Realtek repository on github]] the license of the blob in unknown. The blob packaged with "CLOSED" and firmware loaded, however...
+Yes, new issue appeared and it was:
+#+BEGIN_SRC
+[   31.823459] Bluetooth: hci0: RTL: examining hci_ver=08 hci_rev=000d lmp_ver=08 lmp_subver=8723
+[   31.836205] Bluetooth: hci0: RTL: rom_version status=0 version=2                                     
+[   31.842470] Bluetooth: hci0: RTL: loading rtl_bt/rtl8723ds_fw.bin                                                                                           
+[   31.866849] Bluetooth: hci0: RTL: loading rtl_bt/rtl8723ds_config.bin                
+[   31.898736] Bluetooth: hci0: RTL: cfg_sz 25, total sz 34605                         
+[   32.483333] Bluetooth: hci0: RTL: fw version 0xaa897e1b                  
+[   32.553924] Bluetooth: hci0: Opcode 0x c77 failed: -56
+#+END_SRC
+Thankfully [[https://lwn.net/Articles/922522/][the patch]] to fix this issue has been send few days before I hit the issue and while it was for another device it was trivial task to apply the quirck for rtl8723ds as well.
+and finaly:
+#+BEGIN_SRC
+[bluetooth]# list
+Controller 68:B9:D3:6C:90:DB mangopi-mq-pro [default]
+#+END_SRC
+
+*** The conclusion
+It was really interesting task and I'm very satisfied with the outcome. The results are merged into [[https://github.com/riscv/meta-riscv][meta-riscv]] repository and now owners of the MangoPi MQ Pro board can build their own image for this device (do not forget to put firmware into /lib/firmware/rtl_bt/) and enjoy working Bluetooth! 
+
+
+
+
+* Footnotes
+* COMMENT Local Variables                          :ARCHIVE:
+# Local Variables:
+# eval: (org-hugo-auto-export-mode)
+# End:
